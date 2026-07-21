@@ -45,8 +45,8 @@ mkdir -p "$WT_PARENT"
 git worktree add "$WT_DIR" -b "$BRANCH" "$BASE" >&2
 
 # New tmux PANE in the CURRENT window, cwd = worktree dir; capture its id.
-# WT_SPLIT=v (default) stacks panes full-width (better for the Claude TUI); h = side-by-side.
-case "${WT_SPLIT:-v}" in h) SPLIT_FLAG="-h" ;; v|*) SPLIT_FLAG="-v" ;; esac
+# WT_SPLIT=h (default) puts panes side-by-side (left|right); v = stacked full-width.
+case "${WT_SPLIT:-h}" in v) SPLIT_FLAG="-v" ;; h|*) SPLIT_FLAG="-h" ;; esac
 TARGET="$(tmux split-window "$SPLIT_FLAG" -P -F '#{session_name}:#{window_index}.#{pane_index}' -c "$WT_DIR")"
 # Title the pane by branch so it's identifiable (harmless if pane titles aren't displayed).
 tmux select-pane -t "$TARGET" -T "$LABEL" 2>/dev/null || true

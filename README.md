@@ -51,7 +51,7 @@ Unzip into one of:
 | Variable    | Default            | Meaning                                                    |
 | ----------- | ------------------ | ---------------------------------------------------------- |
 | `WT_BASE`   | *(current branch)* | Branch new worktrees are cut from.                         |
-| `WT_SPLIT`  | `v`                | `v` = stacked/full-width panes, `h` = side-by-side.        |
+| `WT_SPLIT`  | `h`                | `h` = side-by-side (left\|right) panes, `v` = stacked/full-width. |
 | `WT_LAYOUT` | *(unset)*          | If set (e.g. `tiled`), re-tile panes after each spawn.     |
 
 ## Requirements & notes

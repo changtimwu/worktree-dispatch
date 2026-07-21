@@ -31,8 +31,8 @@ session you use for review/merge — whatever integration branch it sits on
    **current branch** by default (override with the `WT_BASE` env var or a 3rd
    arg), in a sibling folder `../<repo>-worktrees/<label>`.
 3. Open a **new tmux pane in the current window** (a split of your control session —
-   not a detached `--tmux` session), cwd set to the worktree. Split is stacked/
-   full-width by default; set `WT_SPLIT=h` for side-by-side.
+   not a detached `--tmux` session), cwd set to the worktree. Split is side-by-side
+   (left|right) by default; set `WT_SPLIT=v` for stacked/full-width.
 4. Launch `claude --name '<branch>'` in that window so the session — and its
    remote-control entry — is identifiable by branch.
 5. Enable **`/remote-control`** in the new session once it has booted, then report
