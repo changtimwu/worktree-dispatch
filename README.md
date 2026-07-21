@@ -62,3 +62,19 @@ Unzip into one of:
   works fully.
 - Worktrees are created with `git worktree add` (not `claude --worktree`) so you get
   clean `feature/*` / `bugfix/*` branches off your chosen base. See SKILL.md for why.
+
+## Changelog
+
+### 2026-07-21
+
+- **`WT_BASE` now defaults to your current branch** (was hardcoded `develop`).
+  Worktrees are cut from whatever branch the control session is on — `main`,
+  `develop`, a release branch, anything. Override with `WT_BASE` or a 3rd arg as
+  before. `spawn.sh` also refuses in detached HEAD (no branch to default to) and now
+  echoes the resolved base to stderr and appends `BASE=<base>` to its stdout line.
+- **`WT_SPLIT` now defaults to `h` — side-by-side (left|right) panes** (was `v`,
+  stacked/full-width). Set `WT_SPLIT=v` for the old stacked layout.
+- **`enable_remote.sh` readiness detection fixed.** It only matched the old
+  `? for shortcuts` hint; newer CLIs (2.1.x) show `← for agents` / `auto mode on|off`,
+  so it never matched and always waited the full timeout. It now recognizes any of
+  these and proceeds as soon as the session is idle-ready.
