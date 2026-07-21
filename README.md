@@ -7,12 +7,29 @@ current branch (`main`, `develop`, or whatever you're on — override with
 `WT_BASE`), splits a new tmux **pane**, launches Claude named by the branch, and
 enables `/remote-control` so you can also check in from your phone.
 
-## Slash commands
+## Usage
 
-This skill is triggered by natural language ("spin up a bugfix session for…"), so
-no slash command is required. For a faster trigger, two optional one-line wrappers
-are included — drop them into `.claude/commands/` (see
-`references/slash-command.md`):
+**Just ask for it in plain English — no setup, no slash command.** From your
+control session (inside tmux), say what you want to work on:
+
+```
+spin up a bugfix session for the login timeout
+start a feature to add a dark mode toggle
+new worktree to refactor the auth module
+```
+
+Claude recognizes the intent, picks the branch name (`bugfix/*` or `feature/*`),
+cuts the worktree, splits a pane, launches Claude there, and enables remote
+control. This works out of the box — the phrasing doesn't have to be exact.
+
+### Optional: `/feature` and `/bugfix` shortcuts
+
+> ⚠️ **These commands do not exist until you create them.** Typing `/feature` or
+> `/bugfix` before setting them up will do nothing — use the plain-English way
+> above, or add these one-line wrappers first.
+
+If you want a shorter trigger, drop two tiny wrapper files into `.claude/commands/`
+(full instructions in `references/slash-command.md`). Once created:
 
 | Command             | What it does                                                                  |
 | ------------------- | ----------------------------------------------------------------------------- |
@@ -22,8 +39,9 @@ are included — drop them into `.claude/commands/` (see
 Example: `/feature add dark mode toggle` → branch `feature/add-dark-mode`, new pane,
 Claude launched there, remote control enabled.
 
-> These commands are thin wrappers that just hand the request to this skill; all the
-> real logic (naming, worktree, tmux, remote control) stays in one place.
+> The commands are thin wrappers that just hand the request to this skill — the same
+> thing the plain-English trigger does. All the real logic (naming, worktree, tmux,
+> remote control) stays in one place.
 
 ## What happens under the hood
 
@@ -67,6 +85,11 @@ Unzip into one of:
 
 ### 2026-07-21
 
+- **README now leads with the natural-language trigger.** The old layout opened with
+  a "Slash commands" table, so first-time users typed `/feature` / `/bugfix` before
+  those wrappers existed and nothing happened. The plain-English way is now shown
+  first, and the slash commands are clearly marked as optional shortcuts you must
+  create yourself.
 - **`WT_BASE` now defaults to your current branch** (was hardcoded `develop`).
   Worktrees are cut from whatever branch the control session is on — `main`,
   `develop`, a release branch, anything. Override with `WT_BASE` or a 3rd arg as
