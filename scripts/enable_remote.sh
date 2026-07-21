@@ -12,8 +12,10 @@ TARGET="${1:-}"; TIMEOUT="${2:-40}"
 ready=""
 for _ in $(seq 1 "$TIMEOUT"); do
   pane="$(tmux capture-pane -t "$TARGET" -p 2>/dev/null || true)"
-  # Claude Code prints this hint near the input box once it is idle and ready for input.
-  if printf '%s' "$pane" | grep -q "? for shortcuts"; then ready=1; break; fi
+  # Claude Code renders one of these hints under the input box once it is idle and
+  # ready. The exact wording drifts between CLI versions ("? for shortcuts" on older
+  # builds, "← for agents" / "auto mode on|off" on 2.1.x), so match any of them.
+  if printf '%s' "$pane" | grep -qE '\? for shortcuts|for agents|auto mode (on|off)'; then ready=1; break; fi
   sleep 1
 done
 
