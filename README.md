@@ -1,9 +1,10 @@
 # worktree-dispatch
 
 Kick off a new feature or bugfix in its **own git worktree + Claude session** —
-without leaving your control (`develop`) session. Run it from the session you use
-for review/merge, which must be inside **tmux**. It creates the worktree off
-`develop`, splits a new tmux **pane**, launches Claude named by the branch, and
+without leaving your control session. Run it from the session you use for
+review/merge, which must be inside **tmux**. It creates the worktree off your
+current branch (`main`, `develop`, or whatever you're on — override with
+`WT_BASE`), splits a new tmux **pane**, launches Claude named by the branch, and
 enables `/remote-control` so you can also check in from your phone.
 
 ## Slash commands
@@ -13,10 +14,10 @@ no slash command is required. For a faster trigger, two optional one-line wrappe
 are included — drop them into `.claude/commands/` (see
 `references/slash-command.md`):
 
-| Command             | What it does                                                            |
-| ------------------- | ----------------------------------------------------------------------- |
-| `/feature <desc>`   | Dispatch a new session on branch `feature/<slug>`, cut from `develop`.  |
-| `/bugfix <desc>`    | Dispatch a new session on branch `bugfix/<slug>`, cut from `develop`.   |
+| Command             | What it does                                                                  |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `/feature <desc>`   | Dispatch a new session on branch `feature/<slug>`, cut from your base branch. |
+| `/bugfix <desc>`    | Dispatch a new session on branch `bugfix/<slug>`, cut from your base branch.  |
 
 Example: `/feature add dark mode toggle` → branch `feature/add-dark-mode`, new pane,
 Claude launched there, remote control enabled.
@@ -30,7 +31,7 @@ The skill runs the scripts in `scripts/`. You can also call them directly:
 
 | Script                    | Purpose                                                            |
 | ------------------------- | ------------------------------------------------------------------ |
-| `spawn.sh <kind> <desc>`  | Create worktree off `develop`, split a pane, launch Claude. Prints `TARGET BRANCH DIR`. |
+| `spawn.sh <kind> <desc>`  | Create worktree off your current branch (or `WT_BASE`), split a pane, launch Claude. Prints `TARGET BRANCH DIR BASE`. |
 | `enable_remote.sh <target>` | Wait for the new session to boot, then enable `/remote-control`. |
 | `peek.sh <target>`        | Read the other session's screen (local review, always works).      |
 | `drive.sh <target> "…"`   | Type a line into the other session and press Enter.                |
@@ -47,11 +48,11 @@ Unzip into one of:
 
 ## Configuration
 
-| Variable    | Default   | Meaning                                                    |
-| ----------- | --------- | ---------------------------------------------------------- |
-| `WT_BASE`   | `develop` | Branch new worktrees are cut from.                         |
-| `WT_SPLIT`  | `v`       | `v` = stacked/full-width panes, `h` = side-by-side.        |
-| `WT_LAYOUT` | *(unset)* | If set (e.g. `tiled`), re-tile panes after each spawn.     |
+| Variable    | Default            | Meaning                                                    |
+| ----------- | ------------------ | ---------------------------------------------------------- |
+| `WT_BASE`   | *(current branch)* | Branch new worktrees are cut from.                         |
+| `WT_SPLIT`  | `v`                | `v` = stacked/full-width panes, `h` = side-by-side.        |
+| `WT_LAYOUT` | *(unset)*          | If set (e.g. `tiled`), re-tile panes after each spawn.     |
 
 ## Requirements & notes
 
@@ -60,4 +61,4 @@ Unzip into one of:
   CLI v2.1.51+. If it's unavailable, the local `peek.sh` / `drive.sh` path still
   works fully.
 - Worktrees are created with `git worktree add` (not `claude --worktree`) so you get
-  clean `feature/*` / `bugfix/*` branches off `develop`. See SKILL.md for why.
+  clean `feature/*` / `bugfix/*` branches off your chosen base. See SKILL.md for why.

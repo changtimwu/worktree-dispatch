@@ -1,34 +1,35 @@
 ---
 name: worktree-dispatch
 description: >-
-  Spawn an isolated git-worktree Claude session from your control ("develop")
-  session and wire it for both local tmux driving and phone/web remote control.
-  Use this whenever you are working in your develop/review session inside tmux
+  Spawn an isolated git-worktree Claude session from your control session and
+  wire it for both local tmux driving and phone/web remote control.
+  Use this whenever you are working in your control/review session inside tmux
   and want to kick off a new feature or bugfix in its own worktree + Claude
   session — phrases like "start a feature to…", "spin up a bugfix session for…",
   "new worktree for…", "dispatch a session to work on…". It names the branch by
-  convention (feature/* or bugfix/*), cuts the worktree from develop, opens a new
-  tmux window in the current session, launches Claude named by the branch, and
-  enables /remote-control. Trigger it even when the word "worktree" isn't said —
-  any request to start parallel work in a fresh session from the control session
-  should use this skill.
+  convention (feature/* or bugfix/*), cuts the worktree from your control
+  session's current branch (main, develop, or whatever you're on — override with
+  WT_BASE), opens a new tmux window in the current session, launches Claude named
+  by the branch, and enables /remote-control. Trigger it even when the word
+  "worktree" isn't said — any request to start parallel work in a fresh session
+  from the control session should use this skill.
 ---
 
 # worktree-dispatch
 
 Kick off a new feature/bugfix in an isolated worktree + Claude session **from the
 control session**, without dropping to a shell yourself. This skill runs from the
-session sitting on `develop` (the one you use for review/merge), which must be
-running **inside tmux**.
+session you use for review/merge — whatever integration branch it sits on
+(`main`, `develop`, a release branch, …) — which must be running **inside tmux**.
 
 ## What it does, in order
 
 1. Classify the request as **feature** or **bugfix** and derive a kebab-case slug
    from the description. Branch name follows your convention:
    `feature/<slug>` or `bugfix/<slug>`.
-2. Create the worktree with `git worktree add`, cut from **`develop`** (override
-   with the `WT_BASE` env var or a 3rd arg), in a sibling folder
-   `../<repo>-worktrees/<label>`.
+2. Create the worktree with `git worktree add`, cut from the control session's
+   **current branch** by default (override with the `WT_BASE` env var or a 3rd
+   arg), in a sibling folder `../<repo>-worktrees/<label>`.
 3. Open a **new tmux pane in the current window** (a split of your control session —
    not a detached `--tmux` session), cwd set to the worktree. Split is stacked/
    full-width by default; set `WT_SPLIT=h` for side-by-side.
@@ -42,12 +43,13 @@ running **inside tmux**.
 ## Why not just `claude --worktree`?
 
 As of mid-2026, `claude --worktree <name>` (a) prepends `worktree-` to the branch,
-(b) bases it off the **remote default** branch rather than your `develop`, and
-(c) places the tree under `.claude/worktrees/`, which has been reported to break
-skill and slash-command discovery in the spawned session. Because you want clean
-`feature/*` and `bugfix/*` branches cut from `develop`, this skill creates the
-worktree explicitly and launches a plain `claude` inside it. If Claude Code later
-fixes the `--worktree` naming/base behavior, you can simplify step 2.
+(b) always bases it off the **remote default** branch rather than the branch you're
+actually on, and (c) places the tree under `.claude/worktrees/`, which has been
+reported to break skill and slash-command discovery in the spawned session. Because
+you want clean `feature/*` and `bugfix/*` branches cut from your chosen base, this
+skill creates the worktree explicitly and launches a plain `claude` inside it. If
+Claude Code later fixes the `--worktree` naming/base behavior, you can simplify
+step 2.
 
 ## Running it
 
@@ -58,20 +60,23 @@ path when you run them.
 (free text is fine; it gets slugified):
 
 ```bash
-scripts/spawn.sh feature "Add dark mode toggle"
-# or override the base branch:
-WT_BASE=develop scripts/spawn.sh bugfix "login times out after idle"
+scripts/spawn.sh feature "Add dark mode toggle"   # cuts from your current branch
+# or override the base branch (env var or 3rd arg):
+WT_BASE=main scripts/spawn.sh bugfix "login times out after idle"
+scripts/spawn.sh bugfix "login times out after idle" release/2.0
 ```
 
 `spawn.sh` prints exactly one line on stdout — capture it:
 
 ```
-TARGET=mysess:1.2 BRANCH=feature/add-dark-mode DIR=/path/repo-worktrees/feature-add-dark-mode
+TARGET=mysess:1.2 BRANCH=feature/add-dark-mode DIR=/path/repo-worktrees/feature-add-dark-mode BASE=main
 ```
 
-Parse `TARGET`, `BRANCH`, and `DIR` from that line and remember them for this
-session. If a branch or worktree dir already exists, `spawn.sh` refuses rather than
-clobbering — report the error to the user and stop.
+Parse `TARGET`, `BRANCH`, `DIR`, and `BASE` from that line and remember them for this
+session. `BASE` tells you which branch it was actually cut from — worth relaying to
+the user so there's no surprise. If a branch or worktree dir already exists, or the
+control session is in detached HEAD with no base given, `spawn.sh` refuses rather
+than clobbering — report the error to the user and stop.
 
 **Step 5 — enable remote control.** Pass the `TARGET` from step 1:
 
@@ -125,8 +130,9 @@ for two one-line command files you can drop into `.claude/commands/`.
 ## Preconditions & assumptions
 
 - The control session runs **inside tmux** (`spawn.sh` refuses otherwise).
-- You're inside a git repo whose integration branch is **`develop`** (override with
-  `WT_BASE`). If your repo's `develop` should be freshly synced first, run
-  `git fetch && git switch develop && git pull` before dispatching.
+- The worktree is cut from the control session's **current branch** by default;
+  point it elsewhere with `WT_BASE` or a 3rd arg. Whatever the base is, it should be
+  freshly synced first — e.g. `git fetch && git switch main && git pull` (or your
+  integration branch) — before dispatching.
 - Any repo-local skills/commands you want the child session to have must be committed
   (worktrees only check out tracked files); user-level `~/.claude/` always applies.
