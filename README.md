@@ -2,8 +2,8 @@
 
 Kick off a new feature or bugfix in its **own git worktree + Claude session** —
 without leaving your control session — then sweep the PRs those sessions produce
-from the same place. Run it from the session you use for
-review/merge, which must be inside **tmux**. It creates the worktree off your
+from the same place. Run it from the session you use for review/merge, ideally
+inside **tmux**. It creates the worktree off your
 current branch (`main`, `develop`, or whatever you're on — override with
 `WT_BASE`), splits a new tmux **pane**, and launches Claude named by the branch.
 
@@ -15,6 +15,86 @@ dispatch ──▶ worktree session ──▶ PR
                          │
                 merged ──┴──▶ teardown.sh (pane + worktree)
 ```
+
+## Requirements
+
+| Tool | Minimum | Why | Tested on |
+| --- | --- | --- | --- |
+| git | 2.17 | `git worktree add` (2.5) and `git worktree remove` (2.17) | 2.47.1 |
+| Claude Code CLI | any | `claude` must be on `PATH` — the spawned pane launches it by name | 2.1.220 |
+| tmux | 2.0 | holds the dispatched sessions. The **binary** is required; being *inside* tmux is not — outside, dispatch falls back to a detached session | 3.6a |
+| gh | 2.0 | **sweep only** — `gh pr list --json` and friends; dispatch never calls it | 2.96.0 |
+
+`scripts/preflight.sh` verifies all of these in place, so you don't have to check by hand.
+
+## Install
+
+The skill is one directory: `SKILL.md` plus the `scripts/` and `references/` next to it.
+Claude finds it by dropping that directory into a skills folder — pick one:
+
+**Personal — every repo on this machine** (recommended for a solo dev):
+
+```bash
+git clone https://github.com/changtimwu/worktree-dispatch.git \
+  ~/.claude/skills/worktree-dispatch
+```
+
+**Personal, but you want to hack on it** — keep the clone wherever you keep code and
+symlink it in. Claude follows the symlink, and your edits are live with no re-copy:
+
+```bash
+git clone https://github.com/changtimwu/worktree-dispatch.git ~/code/worktree-dispatch
+ln -s ~/code/worktree-dispatch ~/.claude/skills/worktree-dispatch
+```
+
+**Per-repo — checked in for the whole team:**
+
+```bash
+git clone https://github.com/changtimwu/worktree-dispatch.git \
+  <repo>/.claude/skills/worktree-dispatch
+rm -rf <repo>/.claude/skills/worktree-dispatch/.git    # vendor it, don't nest a repo
+git -C <repo> add .claude/skills/worktree-dispatch && git -C <repo> commit -m "Add worktree-dispatch skill"
+```
+
+> **Commit it if you install per-repo.** Worktrees only check out *tracked* files, so an
+> uncommitted skill is invisible to every session this skill dispatches. A personal
+> install under `~/.claude/` always applies and has no such catch.
+
+Keep the directory intact — the skill calls its scripts by path relative to `SKILL.md`.
+If you installed from a zip rather than a clone, restore the executable bits that git
+tracks for you: `chmod +x scripts/*.sh`.
+
+### Verify
+
+```bash
+ls ~/.claude/skills/worktree-dispatch/SKILL.md      # the file Claude reads
+cd <the repo you want to work in>                   # preflight checks the CURRENT repo
+~/.claude/skills/worktree-dispatch/scripts/preflight.sh
+```
+
+Then start a **new** Claude session inside tmux and say *"spin up a feature session for a
+dark mode toggle"* — if it runs `spawn.sh` and hands you back a tmux target, you're wired
+up. Skills are read at session start, so an already-running session won't see a fresh
+install.
+
+### Optional setup
+
+- **`/feature`, `/bugfix`, `/pr-sweep` shortcuts** — three one-line wrapper files;
+  see [below](#optional-feature-bugfix-pr-sweep-shortcuts).
+- **Sweeping a repo** — copy `references/review-policy.md` to that repo's root and tune
+  its knobs. The sweep refuses to run without it.
+- **Phone/web access to dispatched sessions** — set `"remoteControlAtStartup": true` in
+  `~/.claude/settings.json`; this skill deliberately doesn't manage that.
+
+### Update / remove
+
+```bash
+git -C ~/.claude/skills/worktree-dispatch pull     # update
+rm -rf ~/.claude/skills/worktree-dispatch          # remove (or unlink, if symlinked)
+```
+
+Removing the skill leaves your worktrees, branches, and tmux sessions untouched — clean
+those up with `scripts/teardown.sh` first if you want them gone.
 
 ## First run
 
@@ -122,13 +202,6 @@ The skill runs the scripts in `scripts/`. You can also call them directly:
 `<target>` is a tmux pane address like `mysess:1.2`, printed by `spawn.sh` — or
 re-derived any time with `sessions.sh`.
 
-## Install
-
-Unzip into one of:
-
-- `~/.claude/skills/` — available in every repo (recommended for a solo dev)
-- `<repo>/.claude/skills/` — checked into a specific repo
-
 ## Configuration
 
 | Variable    | Default            | Meaning                                                    |
@@ -156,10 +229,11 @@ Merge criteria live in the swept repo's `review-policy.md`, not in env vars — 
 | `sessions.sh` shows `TARGET=-` for a session you know is running | It matches panes by working directory; someone `cd`'d the pane out of the worktree root. | `cd` back, or address the pane by its tmux target directly. |
 | Dispatched Claude session you can't see | `MODE=detached` — it went into a background tmux session. | `tmux attach -t wtd` (or `$WT_SESSION`). |
 
-## Requirements & notes
+## Notes
 
-- Run `scripts/preflight.sh` when something doesn't behave — it checks all of the below.
-- Control session should run **inside tmux**; if it doesn't, dispatch falls back to a
+- Run `scripts/preflight.sh` when something doesn't behave — it checks every mechanical
+  assumption both modes make and names the fix for each failure.
+- The control session should run **inside tmux**; if it doesn't, dispatch falls back to a
   detached session and everything except the side-by-side view keeps working.
 - Sweeping needs `gh` authenticated and a **`review-policy.md` in the repo you sweep**.
   No policy file → the sweep stops and asks for one instead of inventing criteria.
@@ -198,6 +272,11 @@ Merge criteria live in the swept repo's `review-policy.md`, not in env vars — 
 - **`review-policy.md` gained a machine-readable knobs block** (now the authoritative
   copy, read by preflight) plus `REQUIRE_LABEL` / `SWEEP_LABEL` and a solo-repo starter
   note. Policy files without the block still work — preflight warns and uses defaults.
+- **Real install instructions.** The old section said "unzip into one of" and listed two
+  paths — no requirements, no verification, no update path. There are now version
+  minimums, three install layouts (personal, symlinked-for-hacking, per-repo committed),
+  a verify step, and the caveat that a per-repo install must be **committed** or the
+  worktree sessions this skill spawns can't see it.
 
 ### 2026-07-26 (2)
 
