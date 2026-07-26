@@ -30,4 +30,4 @@ Then, from the control session:
 ```
 
 Each command just hands the request to the skill, so all the branch-naming,
-worktree, tmux, and remote-control logic stays in one place.
+worktree, and tmux logic stays in one place.

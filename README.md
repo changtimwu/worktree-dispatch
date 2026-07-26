@@ -4,8 +4,7 @@ Kick off a new feature or bugfix in its **own git worktree + Claude session** �
 without leaving your control session. Run it from the session you use for
 review/merge, which must be inside **tmux**. It creates the worktree off your
 current branch (`main`, `develop`, or whatever you're on — override with
-`WT_BASE`), splits a new tmux **pane**, launches Claude named by the branch, and
-enables `/remote-control` so you can also check in from your phone.
+`WT_BASE`), splits a new tmux **pane**, and launches Claude named by the branch.
 
 ## Usage
 
@@ -19,8 +18,8 @@ new worktree to refactor the auth module
 ```
 
 Claude recognizes the intent, picks the branch name (`bugfix/*` or `feature/*`),
-cuts the worktree, splits a pane, launches Claude there, and enables remote
-control. This works out of the box — the phrasing doesn't have to be exact.
+cuts the worktree, splits a pane, and launches Claude there. This works out of the
+box — the phrasing doesn't have to be exact.
 
 ### Optional: `/feature` and `/bugfix` shortcuts
 
@@ -37,11 +36,11 @@ If you want a shorter trigger, drop two tiny wrapper files into `.claude/command
 | `/bugfix <desc>`    | Dispatch a new session on branch `bugfix/<slug>`, cut from your base branch.  |
 
 Example: `/feature add dark mode toggle` → branch `feature/add-dark-mode`, new pane,
-Claude launched there, remote control enabled.
+Claude launched there.
 
 > The commands are thin wrappers that just hand the request to this skill — the same
-> thing the plain-English trigger does. All the real logic (naming, worktree, tmux,
-> remote control) stays in one place.
+> thing the plain-English trigger does. All the real logic (naming, worktree, tmux)
+> stays in one place.
 
 ## What happens under the hood
 
@@ -50,8 +49,7 @@ The skill runs the scripts in `scripts/`. You can also call them directly:
 | Script                    | Purpose                                                            |
 | ------------------------- | ------------------------------------------------------------------ |
 | `spawn.sh <kind> <desc>`  | Create worktree off your current branch (or `WT_BASE`), split a pane, launch Claude. Prints `TARGET BRANCH DIR BASE`. |
-| `enable_remote.sh <target>` | Wait for the new session to boot, then enable `/remote-control`. |
-| `peek.sh <target>`        | Read the other session's screen (local review, always works).      |
+| `peek.sh <target>`        | Read the other session's screen (local review).                    |
 | `drive.sh <target> "…"`   | Type a line into the other session and press Enter.                |
 | `teardown.sh <target> <dir>` | Exit Claude, close **only** that pane, `git worktree remove`.   |
 
@@ -75,13 +73,22 @@ Unzip into one of:
 ## Requirements & notes
 
 - Control session must run **inside tmux**.
-- `/remote-control` is **off by default** and gated to Pro/Max/Team/Enterprise on
-  CLI v2.1.51+. If it's unavailable, the local `peek.sh` / `drive.sh` path still
-  works fully.
+- **Remote control isn't handled here.** Put `"remoteControlAtStartup": true` in
+  `~/.claude/settings.json` and every session — including spawned worktree sessions —
+  starts with it enabled. The local `peek.sh` / `drive.sh` path works either way.
 - Worktrees are created with `git worktree add` (not `claude --worktree`) so you get
   clean `feature/*` / `bugfix/*` branches off your chosen base. See SKILL.md for why.
 
 ## Changelog
+
+### 2026-07-26
+
+- **Dropped the remote-control step and `scripts/enable_remote.sh`.** Claude Code can
+  turn remote control on itself via `"remoteControlAtStartup": true` in
+  `~/.claude/settings.json`, which covers spawned sessions too — so poking
+  `/remote-control` into the new pane and screen-scraping for a ready prompt was
+  redundant (and version-fragile). The skill now stops after launching Claude in the
+  new pane.
 
 ### 2026-07-21
 

@@ -2,15 +2,15 @@
 name: worktree-dispatch
 description: >-
   Spawn an isolated git-worktree Claude session from your control session and
-  wire it for both local tmux driving and phone/web remote control.
+  wire it for local tmux driving.
   Use this whenever you are working in your control/review session inside tmux
   and want to kick off a new feature or bugfix in its own worktree + Claude
   session — phrases like "start a feature to…", "spin up a bugfix session for…",
   "new worktree for…", "dispatch a session to work on…". It names the branch by
   convention (feature/* or bugfix/*), cuts the worktree from your control
   session's current branch (main, develop, or whatever you're on — override with
-  WT_BASE), opens a new tmux window in the current session, launches Claude named
-  by the branch, and enables /remote-control. Trigger it even when the word
+  WT_BASE), opens a new tmux window in the current session, and launches Claude
+  named by the branch. Trigger it even when the word
   "worktree" isn't said — any request to start parallel work in a fresh session
   from the control session should use this skill.
 ---
@@ -21,6 +21,10 @@ Kick off a new feature/bugfix in an isolated worktree + Claude session **from th
 control session**, without dropping to a shell yourself. This skill runs from the
 session you use for review/merge — whatever integration branch it sits on
 (`main`, `develop`, a release branch, …) — which must be running **inside tmux**.
+
+Remote control is **not** this skill's job: set `"remoteControlAtStartup": true` in
+`~/.claude/settings.json` and every session, including the spawned one, comes up with
+it already on.
 
 ## What it does, in order
 
@@ -33,11 +37,9 @@ session you use for review/merge — whatever integration branch it sits on
 3. Open a **new tmux pane in the current window** (a split of your control session —
    not a detached `--tmux` session), cwd set to the worktree. Split is side-by-side
    (left|right) by default; set `WT_SPLIT=v` for stacked/full-width.
-4. Launch `claude --name '<branch>'` in that window so the session — and its
-   remote-control entry — is identifiable by branch.
-5. Enable **`/remote-control`** in the new session once it has booted, then report
-   the pairing output.
-6. Hand back the tmux **target** (`session:window.pane`) so you can peek at / drive
+4. Launch `claude --name '<branch>'` in that window so the session is identifiable
+   by branch — locally and in any remote-control list.
+5. Hand back the tmux **target** (`session:window.pane`) so you can peek at / drive
    the session locally for the rest of its life.
 
 ## Why not just `claude --worktree`?
@@ -56,7 +58,7 @@ step 2.
 All scripts live in `scripts/` next to this file. Refer to them by their absolute
 path when you run them.
 
-**Step 1–4 — spawn.** Pick `feature` or `bugfix`, pass the user's description
+**Steps 1–4 — spawn.** Pick `feature` or `bugfix`, pass the user's description
 (free text is fine; it gets slugified):
 
 ```bash
@@ -78,26 +80,13 @@ the user so there's no surprise. If a branch or worktree dir already exists, or 
 control session is in detached HEAD with no base given, `spawn.sh` refuses rather
 than clobbering — report the error to the user and stop.
 
-**Step 5 — enable remote control.** Pass the `TARGET` from step 1:
-
-```bash
-scripts/enable_remote.sh mysess:1.2
-```
-
-It waits for the new Claude to finish booting (detects the idle input prompt), sends
-`/remote-control`, then prints the pane so you can relay the pairing URL to the user.
-Remote control is **off by default and gated to Pro/Max/Team/Enterprise on CLI
-v2.1.51+**. If the pane shows "not available", tell the user that remote control
-isn't enabled for their workspace — the **local tmux path (below) still works fully**.
-
-**Step 6 — report.** Tell the user, concisely: the branch, the worktree dir, the
+**Step 5 — report.** Tell the user, concisely: the branch, the worktree dir, the
 tmux target, and how they'll interact (see below). Do NOT keep the turn open waiting
 — they'll come back when there's a PR to review.
 
 ## Interacting with the spawned session afterward
 
-From the control session you drive the worktree session over plain tmux — this
-always works regardless of remote-control availability:
+From the control session you drive the worktree session over plain tmux:
 
 ```bash
 scripts/peek.sh  mysess:1.2        # capture the other session's screen (last 40 lines)
@@ -105,8 +94,8 @@ scripts/drive.sh mysess:1.2 "run the tests and put up a PR when green"
 ```
 
 `peek.sh` is how you "review" without switching windows; `drive.sh` types a line and
-presses Enter in the target session. The remote-control bridge (if enabled) is the
-same session viewed from your phone or the web — use whichever is convenient.
+presses Enter in the target session. If `remoteControlAtStartup` is on, the phone/web
+view is the same session — use whichever is convenient.
 
 ## Cleanup (optional)
 

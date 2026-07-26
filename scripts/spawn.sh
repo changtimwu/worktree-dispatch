@@ -53,7 +53,7 @@ tmux select-pane -t "$TARGET" -T "$LABEL" 2>/dev/null || true
 # Optional: normalize the layout when WT_LAYOUT is set (e.g. tiled, even-vertical).
 [ -n "${WT_LAYOUT:-}" ] && tmux select-layout "${WT_LAYOUT}" 2>/dev/null || true
 
-# Launch a plain Claude in the worktree, session named by branch so remote control is identifiable.
+# Launch a plain Claude in the worktree, session named by branch so it's identifiable.
 tmux send-keys -t "$TARGET" "claude --name '${BRANCH}'" Enter
 
 echo "TARGET=${TARGET} BRANCH=${BRANCH} DIR=${WT_DIR} BASE=${BASE}"
