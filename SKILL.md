@@ -44,11 +44,16 @@ Remote control is **not** this skill's job: set `"remoteControlAtStartup": true`
 `~/.claude/settings.json` and every session, including the spawned one, comes up with
 it already on.
 
-## Preflight — run this first, every time
+## Preflight — you run this, not the user
+
+**This is your job, not a setup step you ask the user to perform.** Run it at the top of
+every dispatch and every sweep, before anything else. The user should never have to run
+it by hand or be told to; they only hear about it when a check fails, and then only as
+the specific problem plus its fix.
 
 Repos and environments are often not set up for this skill, and the failures are quiet:
 a sweep on a repo with no `ready-for-review` label reports "nothing to do" forever,
-because `gh pr list --label <missing>` returns `[]` with exit 0. Check before working:
+because `gh pr list --label <missing>` returns `[]` with exit 0. So check first:
 
 ```bash
 scripts/preflight.sh dispatch     # or: sweep | all (default)
@@ -72,6 +77,8 @@ exit 1 means something failed for that mode.
 
 ### What it does, in order
 
+0. **`scripts/preflight.sh dispatch`** — always, without being asked. A freshly cloned
+   repo passes this clean, so it usually costs one silent command and nothing else.
 1. Classify the request as **feature** or **bugfix** and derive a kebab-case slug
    from the description. Branch name follows your convention:
    `feature/<slug>` or `bugfix/<slug>`.
@@ -103,6 +110,9 @@ step 2.
 
 All scripts live in `scripts/` next to this file. Refer to them by their absolute
 path when you run them.
+
+**Step 0 — preflight.** `scripts/preflight.sh dispatch`. On a clean repo this is one
+quiet command; don't narrate it. Only a `fail` or `warn` reaches the user.
 
 **Steps 1–4 — spawn.** Pick `feature` or `bugfix`, pass the user's description
 (free text is fine; it gets slugified):

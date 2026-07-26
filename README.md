@@ -98,8 +98,17 @@ those up with `scripts/teardown.sh` first if you want them gone.
 
 ## First run
 
-Repos differ, and the ways they're *not* ready for this skill are mostly silent. Check
-before you start:
+**Nothing to do — just ask for work.** Claude runs `preflight.sh` itself at the top of
+every dispatch and every sweep; you only hear about it when something's wrong, and then
+as a specific problem with its fix. A freshly cloned repo passes the dispatch checks
+clean, so the first *"start a feature to…"* works with no setup at all.
+
+The one thing a new repo does need is **for sweeping**: a `review-policy.md` at its root
+(copy `references/review-policy.md` and tune the knobs) and a decision about the
+`ready-for-review` label. The skill walks you through both the first time you sweep that
+repo and records your answers, so it's once per repo, not once per sweep.
+
+Run it by hand whenever you want to see the state of things — it's read-only:
 
 ```console
 $ scripts/preflight.sh          # dispatch | sweep | all (default)
@@ -118,8 +127,7 @@ CHECK=ci            STATUS=warn DETAIL=no GitHub Actions workflows found and ALL
 ```
 
 Every `DETAIL` ends in its own fix. `fail` blocks that mode, `warn` is something you
-should know but doesn't stop anything. Dispatch works on a bare repo out of the box;
-the sweep is what needs setting up, and the skill walks you through it once per repo.
+should know but doesn't stop anything.
 
 ## Usage
 
