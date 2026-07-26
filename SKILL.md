@@ -44,6 +44,30 @@ Remote control is **not** this skill's job: set `"remoteControlAtStartup": true`
 `~/.claude/settings.json` and every session, including the spawned one, comes up with
 it already on.
 
+## Preflight — run this first, every time
+
+Repos and environments are often not set up for this skill, and the failures are quiet:
+a sweep on a repo with no `ready-for-review` label reports "nothing to do" forever,
+because `gh pr list --label <missing>` returns `[]` with exit 0. Check before working:
+
+```bash
+scripts/preflight.sh dispatch     # or: sweep | all (default)
+```
+
+Each line is `CHECK=<name> STATUS=ok|warn|fail DETAIL=<one line, ending in the fix>`;
+exit 1 means something failed for that mode.
+
+- **`fail`** — stop. Relay the `DETAIL` (it already names the fix) and let the user
+  decide. Never work around a fail: don't widen the sweep gate, don't invent merge
+  criteria, don't pick a different base than the one that failed the check.
+- **`warn`** — proceed, but say it out loud in your report. Warnings are the things the
+  user would be surprised by later: cutting from a non-default branch, dispatching into
+  a detached session, a repo where nothing can ever merge.
+- Two `fail`s have a supported recovery path rather than a dead end — the missing
+  `ready-for-review` label and the missing `review-policy.md`. Both are covered under
+  [Sweeping the PRs](#preflight-once-per-sweep-not-per-pr); both end in a **one-time
+  question** whose answer is written into the repo's `review-policy.md`.
+
 ## Dispatch
 
 ### What it does, in order
@@ -56,11 +80,13 @@ it already on.
    arg), in a sibling folder `../<repo>-worktrees/<label>`.
 3. Open a **new tmux pane in the current window** (a split of your control session —
    not a detached `--tmux` session), cwd set to the worktree. Split is side-by-side
-   (left|right) by default; set `WT_SPLIT=v` for stacked/full-width.
+   (left|right) by default; set `WT_SPLIT=v` for stacked/full-width. If the control
+   session is **not inside tmux**, the pane goes into a background session instead —
+   see [Not inside tmux](#not-inside-tmux).
 4. Launch `claude --name '<branch>'` in that window so the session is identifiable
    by branch — locally and in any remote-control list.
-5. Hand back the tmux **target** (`session:window.pane`) so you can peek at / drive
-   the session locally for the rest of its life.
+5. Clear the **trust prompt** (see below) and hand back the tmux **target**
+   (`session:window.pane`) so you can peek at / drive the session for the rest of its life.
 
 ### Why not just `claude --worktree`?
 
@@ -91,18 +117,49 @@ scripts/spawn.sh bugfix "login times out after idle" release/2.0
 `spawn.sh` prints exactly one line on stdout — capture it:
 
 ```
-TARGET=mysess:1.2 BRANCH=feature/add-dark-mode DIR=/path/repo-worktrees/feature-add-dark-mode BASE=main
+TARGET=mysess:1.2 BRANCH=feature/add-dark-mode DIR=/path/repo-worktrees/feature-add-dark-mode BASE=main MODE=split SESSION=mysess
 ```
 
-Parse `TARGET`, `BRANCH`, `DIR`, and `BASE` from that line and remember them for this
-session. `BASE` tells you which branch it was actually cut from — worth relaying to
-the user so there's no surprise. If a branch or worktree dir already exists, or the
-control session is in detached HEAD with no base given, `spawn.sh` refuses rather
-than clobbering — report the error to the user and stop.
+Parse `TARGET`, `BRANCH`, `DIR`, `BASE`, `MODE`, and `SESSION` from that line and remember
+them for this session. `BASE` tells you which branch it was actually cut from — worth
+relaying to the user so there's no surprise. If a branch or worktree dir already exists, or
+the control session is in detached HEAD with no base given, `spawn.sh` refuses rather than
+clobbering — report the error to the user and stop.
 
-**Step 5 — report.** Tell the user, concisely: the branch, the worktree dir, the
-tmux target, and how they'll interact (see below). Do NOT keep the turn open waiting
-— they'll come back when there's a PR to review.
+#### Not inside tmux
+
+`MODE=detached` means the control session wasn't in tmux, so the worktree went into a
+background session (`SESSION`, default `wtd`) instead of a split. Everything else is
+identical — `peek.sh`, `drive.sh`, `sessions.sh`, and `teardown.sh` all work on detached
+panes, because tmux drives them server-side whether or not anyone is attached. Each
+further dispatch gets its own window in that session, and the session disappears on its
+own when the last window is torn down.
+
+The one thing that changes is your report: **lead with `tmux attach -t <SESSION>`**,
+otherwise the user has a Claude session running that they cannot see. `WT_NO_DETACH=1`
+turns this back into a hard failure, and a missing tmux binary always is one.
+
+#### Clear the trust prompt
+
+A brand-new worktree is a directory Claude has never seen, so the spawned session opens
+on **"Do you trust the files in this folder?"** and sits there — `drive.sh` input would
+go into that dialog, not the prompt. Peek, and if the dialog is up, answer it:
+
+```bash
+scripts/peek.sh mysess:1.2 12
+scripts/drive.sh mysess:1.2 "1"      # 1 = Yes, I trust this folder
+scripts/peek.sh mysess:1.2 8         # confirm it reached the input prompt
+```
+
+This is a worktree of the repo the user just dispatched from, cut from their own branch
+on their instruction, so trusting it adds no exposure they haven't already accepted. Peek
+again afterward: that same peek is what proves Claude actually launched (it also catches
+`claude: command not found`, which preflight only warns about).
+
+**Step 5 — report.** Tell the user, concisely: the branch, the worktree dir, the tmux
+target (plus the attach command when `MODE=detached`), any preflight warnings, and how
+they'll interact (see below). Do NOT keep the turn open waiting — they'll come back when
+there's a PR to review.
 
 ### Interacting with the spawned session afterward
 
@@ -123,12 +180,14 @@ to remember what `spawn.sh` printed:
 ```bash
 scripts/sessions.sh                      # every dispatched worktree
 scripts/sessions.sh feature/add-dark-mode   # just this branch; exit 1 if none
-# BRANCH=feature/add-dark-mode DIR=/path/repo-worktrees/feature-add-dark-mode TARGET=mysess:1.2 CMD=claude
+# BRANCH=feature/add-dark-mode DIR=/path/…/feature-add-dark-mode TARGET=mysess:1.2 CMD=2.1.220 ALIVE=yes
 ```
 
 `TARGET=-` means no pane is sitting in that worktree (session torn down, or never
-dispatched from here). `CMD` tells you whether the session is still alive: `claude`
-= running, `zsh`/`bash` = Claude exited but the pane is open.
+dispatched from here). `ALIVE=no` means the pane fell back to a shell — Claude exited.
+**Never `drive.sh` into `ALIVE=no`**: the shell would run your prompt as a command. Note
+a live Claude reports its version as the command name (`CMD=2.1.220`), not `claude`, and
+`ALIVE=yes` only means *something* is in the foreground — `peek.sh` when it matters.
 
 ## Sweeping the PRs
 
@@ -138,12 +197,36 @@ target repo's `review-policy.md`** — the sweep itself only routes.
 
 ### Preflight (once per sweep, not per PR)
 
-1. `gh auth status` must be authenticated, and the repo must have a remote.
-2. The target repo needs a **`review-policy.md`** at its root. If it has none, stop and
-   say so — offer `references/review-policy.md` from this skill as a starting template.
-   Do not invent merge criteria, and do not fall back to "reasonable defaults".
-3. Read that `review-policy.md` **as written**. Its knobs (`INTEGRATION_BASE`,
-   `SIZE_CAP`, `ALLOW_NO_CI`, …) govern everything below.
+```bash
+scripts/preflight.sh sweep
+```
+
+Then read the target repo's `review-policy.md` **as written** — its knobs
+(`INTEGRATION_BASE`, `SIZE_CAP`, `ALLOW_NO_CI`, `REQUIRE_LABEL`, …) govern everything
+below. Three failures have a defined recovery; everything else is a stop-and-report.
+
+**`review-policy` fail — no policy file.** Do not invent merge criteria and do not fall
+back to "reasonable defaults". Offer to copy `references/review-policy.md` into the repo
+root, and say plainly that its knobs need tuning before the first sweep. Copy it only on
+an explicit yes — it is the user's merge policy, not yours.
+
+**`sweep-label` fail — the label doesn't exist.** This is the silent one: the gate would
+return `[]` forever while PRs pile up. Stop, quote the open-PR count from the `DETAIL`,
+and offer exactly three choices:
+
+1. `gh label create <label>` — keep the gate, start labelling PRs as they become ready.
+2. Sweep every non-draft PR targeting the base instead — sets `REQUIRE_LABEL=false`.
+   Say what this widens: with no label gate, *every* open PR is a merge candidate and
+   `review-policy.md` is the only thing between an unlabelled PR and a squash merge.
+3. Abort.
+
+**`ci` warn — no CI and `ALLOW_NO_CI=false`.** Nothing can satisfy the merge criteria, so
+the sweep can only ever comment. Offer to set `ALLOW_NO_CI=true` (merges then carry a
+`no CI configured` note), or to proceed comment-only.
+
+In all three cases, **write the answer into that repo's `review-policy.md` knobs block**
+once the user picks — with their consent, since it changes their merge policy. That is
+what makes this a one-time question per repo instead of a prompt every sweep.
 
 ### Gate command (run FIRST every pass; treat the output as the worklist)
 
@@ -151,13 +234,17 @@ target repo's `review-policy.md`** — the sweep itself only routes.
 BASE="${WT_SWEEP_BASE:-$(git rev-parse --abbrev-ref HEAD)}"   # default: the branch you're on
 gh pr list --label "${WT_SWEEP_LABEL:-ready-for-review}" --base "$BASE" \
   --json number,title,isDraft,reviewDecision,statusCheckRollup,headRefName
+# REQUIRE_LABEL=false in review-policy.md → drop the --label filter entirely
 ```
 
 The base defaults to the control session's **current branch** — the same branch
-`spawn.sh` cuts from, so dispatch and sweep agree by construction. It must equal
-`INTEGRATION_BASE` in `review-policy.md`; if they disagree, say so and stop rather than
-sweeping the wrong queue. Act only on PRs this returns. Skip drafts. Process the delta
-since the last pass.
+`spawn.sh` cuts from, so dispatch and sweep agree by construction; preflight's
+`policy-base` check fails if that disagrees with `INTEGRATION_BASE`. Act only on PRs this
+returns. Skip drafts. Process the delta since the last pass.
+
+An empty result means "nothing is ready" **only because preflight already proved the
+label exists**. Never treat an unverified empty gate as an empty worklist, and never widen
+the gate on your own to make it non-empty.
 
 Then join the worklist to the live sessions **once**:
 
@@ -192,7 +279,7 @@ Match each PR's `headRefName` against `BRANCH` to learn whether a session still 
 3. **ROUTE the outcome back to the worktree** — this is what the sweep adds over
    plain PR triage:
 
-   - **Changes requested** and the branch has a live session (`TARGET` ≠ `-`, `CMD=claude`):
+   - **Changes requested** and the branch has a live session (`TARGET` ≠ `-`, `ALIVE=yes`):
      after `gh pr review <n> --request-changes`, hand the work back to the session that
      owns the branch instead of fixing it in the control session:
 
@@ -202,7 +289,7 @@ Match each PR's `headRefName` against `BRANCH` to learn whether a session still 
 
      Keep it to one line — `drive.sh` sends it as a single prompt — and avoid double
      quotes and backticks in the message, since it passes through the shell.
-   - **Changes requested** and no live session (`TARGET=-`, or `CMD` is a shell): just
+   - **Changes requested** and no live session (`TARGET=-`, or `ALIVE=no`): just
      request changes and note in your log that the session is gone, so the author has
      to pick it up manually. Do **not** re-dispatch a worktree to fix it — that is the
      user's call.
@@ -225,6 +312,10 @@ Match each PR's `headRefName` against `BRANCH` to learn whether a session still 
 - "CI still running" is NOT "CI passed." Never treat pending as success.
 - Never edit the PR branch, CI config, or repo settings to satisfy a criterion — and
   never `drive.sh` the worktree session into doing it for you.
+- Never silence a preflight `fail` by working around it: don't drop the label filter
+  because the label is missing, don't switch base because `policy-base` disagreed, don't
+  write a `review-policy.md` yourself to get past the missing-policy check. Each of those
+  is the user's decision, asked once and recorded in their policy file.
 - If `/code-review` errors or returns no result, comment that review is pending and
   SKIP — never merge an unreviewed PR.
 - If you cannot confirm EVERY merge criterion, do not merge — comment and skip.
@@ -259,15 +350,16 @@ If you'd rather type `/feature …`, `/bugfix …`, and `/pr-sweep`, see
 
 ## Preconditions & assumptions
 
-- The control session runs **inside tmux** (`spawn.sh` refuses otherwise).
-- The worktree is cut from the control session's **current branch** by default;
-  point it elsewhere with `WT_BASE` or a 3rd arg. Whatever the base is, it should be
-  freshly synced first — e.g. `git fetch && git switch main && git pull` (or your
-  integration branch) — before dispatching.
-- Any repo-local skills/commands you want the child session to have must be committed
+`scripts/preflight.sh` checks all of the mechanical ones — run it rather than assuming.
+What it can't check:
+
+- The base should be **freshly synced** before dispatching — e.g.
+  `git fetch && git switch main && git pull`. Preflight tells you *which* branch you'd cut
+  from, not whether it's current.
+- Any repo-local skills/commands you want the child session to have must be **committed**
   (worktrees only check out tracked files); user-level `~/.claude/` always applies.
-- Sweeping additionally needs `gh` authenticated and a **`review-policy.md` in the
-  repo being swept** — `references/review-policy.md` is the template to copy and tune.
-- `sessions.sh` matches panes by working directory, so it only finds sessions whose
-  cwd is still the worktree root. A pane the user `cd`'d elsewhere reports `TARGET=-`;
-  fall back to asking rather than guessing a target.
+- `sessions.sh` matches panes by working directory, so it only finds sessions whose cwd is
+  still the worktree root. A pane the user `cd`'d elsewhere reports `TARGET=-`; ask rather
+  than guessing a target.
+- `review-policy.md` being *present* is checked; whether its knobs suit the repo is not.
+  A freshly copied template still needs tuning — say so the first time you use one.

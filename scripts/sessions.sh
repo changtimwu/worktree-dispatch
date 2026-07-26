@@ -9,12 +9,16 @@
 #   <branch>   only that branch; exits 1 if this repo has no worktree for it
 #
 # Prints one line per worktree, everything else -> stderr:
-#   BRANCH=<branch> DIR=<worktree-dir> TARGET=<session:window.pane|-> CMD=<foreground-cmd|->
+#   BRANCH=<b> DIR=<dir> TARGET=<session:window.pane|-> CMD=<foreground-cmd|-> ALIVE=<yes|no>
 #
 # TARGET is '-' when no pane is sitting in that worktree — the session was torn
-# down, or was never dispatched from here. CMD tells you what is running in the
-# pane: 'claude' means the session is still alive; 'zsh'/'bash' means Claude
-# exited but the pane is still open.
+# down, or was never dispatched from here.
+#
+# ALIVE=no means the pane is sitting at a shell prompt, i.e. Claude exited. Never drive
+# text into one of those: the shell would execute the prompt as a command. ALIVE is
+# derived from CMD not being a shell — note that a running Claude reports its version
+# as the command name (CMD=2.1.220), not 'claude'. It cannot tell Claude apart from any
+# other foreground program, so peek.sh first when it matters.
 set -euo pipefail
 
 WANT="${1:-}"
@@ -50,7 +54,13 @@ emit() {
   [ "$dir" != "$MAIN" ] || return 0                       # skip the control checkout
   [ -z "$WANT" ] || [ "$branch" = "$WANT" ] || return 0
   IFS=$'\t' read -r target cmd <<< "$(pane_for "$dir")"
-  echo "BRANCH=${branch:--} DIR=${dir} TARGET=${target} CMD=${cmd}"
+  # A shell in the foreground means Claude is gone; anything else is a running program.
+  local alive=no
+  case "$cmd" in
+    -|sh|-sh|bash|-bash|zsh|-zsh|fish|-fish|dash|ksh|tcsh|csh|login) alive=no ;;
+    *) alive=yes ;;
+  esac
+  echo "BRANCH=${branch:--} DIR=${dir} TARGET=${target} CMD=${cmd} ALIVE=${alive}"
   found=1
 }
 

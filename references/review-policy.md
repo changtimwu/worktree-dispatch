@@ -16,6 +16,35 @@ Decision inputs the sweep gathers per PR:
 - `gh pr view <n> --json reviewDecision,files,additions,deletions,isDraft,headRefName`
 - `scripts/sessions.sh <headRefName>` → whether a live worktree session still owns the branch
 
+## Knobs
+
+`scripts/preflight.sh` reads this block — it is the authoritative copy of these values.
+Keep it; the table below only explains what each one means.
+
+```
+INTEGRATION_BASE=main
+SIZE_CAP=400
+ALLOW_NO_CI=false
+REQUIRE_HUMAN_APPROVAL=false
+REQUIRE_LABEL=true
+SWEEP_LABEL=ready-for-review
+TEARDOWN_ON_MERGE=false
+```
+
+| Knob | Meaning |
+|---|---|
+| `INTEGRATION_BASE` | The branch PRs must target. Must match the sweep gate's base, which defaults to the control session's current branch; preflight fails on a mismatch rather than sweeping the wrong queue. |
+| `SIZE_CAP` | Max `additions + deletions` for auto-merge. |
+| `ALLOW_NO_CI` | `true` only if the repo genuinely has no CI; a no-checks PR is then mergeable and the merge comment must say `no CI configured`. While this is `false` in a repo with no CI, **nothing can ever merge** — preflight warns about exactly that. |
+| `REQUIRE_HUMAN_APPROVAL` | If `true`, also require `reviewDecision == "APPROVED"` to merge. |
+| `REQUIRE_LABEL` | Whether the gate filters on `SWEEP_LABEL`. Set `false` to sweep every non-draft PR targeting the base — appropriate for a solo repo with no label workflow, but it widens auto-merge scope, so decide deliberately. |
+| `SWEEP_LABEL` | The label the gate filters on when `REQUIRE_LABEL=true`. It must exist in the repo: `gh pr list --label <missing>` returns `[]` with exit 0, which is indistinguishable from "nothing is ready". Preflight checks this. |
+| `TEARDOWN_ON_MERGE` | If `true`, the sweep tears down the merged branch's worktree session without asking. Off by default: teardown kills a live pane. |
+
+**Solo repo starter.** A main-only repo with no CI and no label workflow usually wants
+`INTEGRATION_BASE=main`, `ALLOW_NO_CI=true`, `REQUIRE_LABEL=false` — otherwise the sweep
+either finds nothing or can never merge what it finds.
+
 ## Precedence
 
 Evaluate in this order; first matching outcome wins:
@@ -53,13 +82,3 @@ Body must cite the criterion + the specific finding refs (file:line or check nam
 - `additions + deletions <= SIZE_CAP`.
 - Base branch is `INTEGRATION_BASE`.
 - No sensitive paths touched (see SKIP list).
-
-## Knobs (tune per repo)
-
-| Knob | Value | Note |
-|---|---|---|
-| `INTEGRATION_BASE` | `main` | The branch PRs must target. Must match the sweep gate's `--base` (see SKILL.md § Sweeping the PRs — the gate defaults to the control session's current branch). |
-| `SIZE_CAP` | 400 | Max `additions + deletions` for auto-merge. |
-| `ALLOW_NO_CI` | false | `true` only if the repo genuinely has no CI; a no-checks PR is then mergeable and flagged in the comment. |
-| `REQUIRE_HUMAN_APPROVAL` | false | If `true`, also require `reviewDecision == "APPROVED"` to merge. |
-| `TEARDOWN_ON_MERGE` | false | If `true`, the sweep tears down the merged branch's worktree session without asking. Off by default: teardown kills a live pane. |
